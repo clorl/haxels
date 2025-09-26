@@ -1,12 +1,59 @@
 import haxe.Json;
-import haxe.io.BytesInput;
+import haxe.io.Input;
+import haxe.io.Output;
 import haxe.io.Bytes;
+import haxe.io.Path;
+import sys.io.File;
 
 import result.Result;
 
 class Main {
-    static public function main():Void {
+    static public function main():Void {        
+			var logFilePath = "debug.log";
+			try {
+				// Open the file in Append mode
+				logOutput = File.append(logFilePath);
+				log("--- LSP Server Started ---");
+				log('Logging to: ' + logFilePath);
+			} catch (e:Dynamic) {
+				// If we can't open a log file, logOutput remains null and we won't log.
+				logOutput = null;
+			}
+
+			try {
+				var message = {}; 
+				while(true) {
+					var result = decodeMessage(Sys.stdin());
+					switch result {
+						case Error(e):
+							log(e);
+						case Ok(t): {
+							message = t;
+							return;
+						}
+					}
+				}
+
+				log('Got message $message');
+			} catch (e: Dynamic) {
+				log(e);
+			}
     }
+
+		static var logOutput:Null<Output> = null;
+		static function log(message: String) {
+			if (logOutput != null) {
+				try {
+					var timestamp = Date.now().getHours() + ":" 
+						+ Date.now().getMinutes() + ":" 
+						+ Date.now().getSeconds();
+					logOutput.writeString('[' + timestamp + '] ' + message + "\n");
+					logOutput.flush();
+				} catch (e:Dynamic) {
+					// Ignore logging errors to prevent crashing the main process
+				}
+			}
+		}
 
 		static public function encodeMessage(msg: Dynamic): String {
 			var json = Json.stringify(msg);
@@ -17,7 +64,7 @@ class Main {
 			return header + json;
 		}
 
-		static public function decodeMessage(msg: BytesInput): Result<Dynamic> {
+		static public function decodeMessage(msg: Input): Result<Dynamic> {
 			try {
 				var header = new lsp.Types.Header();
 				var line = msg.readLine();
@@ -44,6 +91,7 @@ class Main {
 
 				var content = msg.readString(header.contentLength);
 				var obj = Json.parse(content);
+				obj.header = header;
 				return Ok(obj);
 			} catch (e: Dynamic) {
 				return Error(e);
